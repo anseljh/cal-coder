@@ -67,6 +67,14 @@ _DAT_COLUMNS: dict[str, list[str]] = {
 
 _LAW_SECTION_LOB_COL = 14  # 0-based index of the LOB filename column in law_section_tbl.dat
 
+# Columns whose values are hierarchical numbers and should have trailing
+# periods and spaces stripped on ingest (e.g. "3.5." → "3.5").
+_STRIP_TRAILING_COLS: dict[str, set[str]] = {
+    "law_toc_tbl": {"division", "title", "part", "chapter", "article"},
+    "law_toc_sections_tbl": {"section_num"},
+    "law_section_tbl": {"section_num", "division", "title", "part", "chapter", "article"},
+}
+
 
 def get_db_connection() -> psycopg.Connection:
     """Return a psycopg connection using DATABASE_URL."""
@@ -102,7 +110,18 @@ def _parse_dat(dat_path: Path):
 
 def _coerce(val: str):
     """Convert MySQL null sentinels or empty string to Python None."""
+    val = val.rstrip()
     return None if val in ("", "\\N", "NULL") else val
+
+
+def _coerce_section_num(val: str | None) -> str | None:
+    """Strip trailing periods and spaces from a section number.
+
+    The PUBINFO .dat files store section numbers with a trailing period
+    (e.g. ``"2019.210."``), and may also include trailing whitespace.
+    This normalises them to bare form (``"2019.210"``).
+    """
+    return val.rstrip(". ") if val is not None else None
 
 
 def _find_dat(extract_dir: Path, table: str) -> Path | None:
@@ -129,7 +148,12 @@ def _load_standard_table(table: str, dat_path: Path, cursor: psycopg.Cursor) -> 
         # Pad short rows (trailing nulls may be omitted in the file)
         if len(row) < len(columns):
             row += [""] * (len(columns) - len(row))
-        batch.append(tuple(_coerce(v) for v in row[: len(columns)]))
+        values = [_coerce(v) for v in row[: len(columns)]]
+        strip = _STRIP_TRAILING_COLS.get(table, set())
+        for i, col in enumerate(columns):
+            if col in strip:
+                values[i] = _coerce_section_num(values[i])
+        batch.append(tuple(values))
         if len(batch) >= 1000:
             cursor.executemany(insert_sql, batch)
             count += len(batch)
@@ -162,6 +186,10 @@ def _load_law_section(dat_path: Path, extract_dir: Path, cursor: psycopg.Cursor)
             row += [""] * (len(columns) - len(row))
 
         values = [_coerce(v) for v in row[: len(columns)]]
+        strip = _STRIP_TRAILING_COLS["law_section_tbl"]
+        for i, col in enumerate(_DAT_COLUMNS["law_section_tbl"]):
+            if col in strip:
+                values[i] = _coerce_section_num(values[i])
 
         # Resolve LOB sidecar for content_xml
         lob_filename = values[_LAW_SECTION_LOB_COL]
@@ -431,15 +459,14 @@ def section_to_markdown(law_code: str, section_num: str) -> str:
     Raises:
         ValueError: Section not found or has no content.
     """
-    display_num = section_num.rstrip(".")
-    db_num = display_num + "."
+    display_num = section_num.rstrip(". ")
 
     with get_db_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 "SELECT content_xml FROM law_section_tbl"
                 " WHERE law_code = %s AND section_num = %s",
-                (law_code, db_num),
+                (law_code, display_num),
             )
             row = cur.fetchone()
 
