@@ -23,7 +23,7 @@ import httpx
 import psycopg
 
 BASE_URL = "https://downloads.leginfo.legislature.ca.gov"
-DOWNLOADS_DIR = Path(__file__).parent / "downloads"
+DOWNLOADS_DIR = Path(__file__).parent.parent / "downloads"
 DATABASE_URL = os.environ.get(
     "DATABASE_URL", "postgresql://capublic:capublic@localhost:5432/capublic"
 )
@@ -477,15 +477,3 @@ def section_to_markdown(law_code: str, section_num: str) -> str:
 
     body = _xml_to_markdown(row[0])
     return f"# {display_num}\n\n{body}\n"
-
-
-# ---------------------------------------------------------------------------
-
-if __name__ == "__main__":
-    import sys
-
-    if len(sys.argv) > 1 and sys.argv[1] == "daily":
-        day_arg = sys.argv[2] if len(sys.argv) > 2 else None
-        run_daily_update(day_arg)
-    else:
-        run_backlog_load()
