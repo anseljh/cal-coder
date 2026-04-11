@@ -13,10 +13,10 @@ cal-coder ingests the California Legislature's PUBINFO database (a publicly down
 docker compose up -d
 
 # Run the initial/backlog load (downloads ~pubinfo_2025.zip, large file)
-DATABASE_URL=postgresql://capublic:capublic@localhost:5433/capublic uv run python pipeline.py
+DATABASE_URL=postgresql://capublic:capublic@localhost:5433/capublic uv run python main.py
 
 # Run a daily incremental update
-DATABASE_URL=postgresql://capublic:capublic@localhost:5433/capublic uv run python pipeline.py daily [Mon|Tue|Wed|Thu|Fri|Sat]
+DATABASE_URL=postgresql://capublic:capublic@localhost:5433/capublic uv run python main.py daily [Mon|Tue|Wed|Thu|Fri|Sat]
 
 # Connect to the database
 docker exec cal-coder-db-1 psql -U capublic -d capublic
@@ -26,7 +26,9 @@ No test suite exists yet. No linter is configured.
 
 ## Architecture
 
-Everything lives in `pipeline.py`. There is no package structure.
+The project is an installable package (`cal_coder/`). All pipeline logic lives in `cal_coder/pipeline.py`; `cal_coder/__init__.py` re-exports the public API. `main.py` is the CLI entry point.
+
+**Nomolith integration:** nomolith (`../nomolith`) depends on this package via a uv path dependency. In `nomolith/pyproject.toml`: `[tool.uv.sources] cal-coder = { path = "../cal-coder" }` with `"cal-coder"` in dependencies. Import as `from cal_coder import section_to_markdown`.
 
 **Data flow — ingest:**
 1. `run_backlog_load()` / `run_daily_update()` — public entry points (designed for Celery Beat)
