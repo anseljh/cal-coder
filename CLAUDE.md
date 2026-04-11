@@ -28,8 +28,6 @@ No test suite exists yet. No linter is configured.
 
 The project is an installable package (`cal_coder/`). All pipeline logic lives in `cal_coder/pipeline.py`; `cal_coder/__init__.py` re-exports the public API. `main.py` is the CLI entry point.
 
-**Nomolith integration:** nomolith (`../nomolith`) depends on this package via a uv path dependency. In `nomolith/pyproject.toml`: `[tool.uv.sources] cal-coder = { path = "../cal-coder" }` with `"cal-coder"` in dependencies. Import as `from cal_coder import section_to_markdown`.
-
 **Data flow — ingest:**
 1. `run_backlog_load()` / `run_daily_update()` — public entry points (designed for Celery Beat)
 2. `download_file()` → `extract_zip()` — fetch and unpack a PUBINFO zip into `downloads/`
